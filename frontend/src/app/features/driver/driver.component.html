@@ -1,0 +1,336 @@
+<div class="driver-container">
+  <!-- Perfil do Motorista Ativo -->
+  <div class="card header-card">
+    <div class="driver-select-header">
+      <div>
+        <h2><i class="pi pi-car"></i> Painel do Motorista</h2>
+        <p class="subtitle">Notificações em tempo real com aceite de corrida sincronizado via Redis.</p>
+      </div>
+      <div class="select-driver-box">
+        <label for="driverSelect">Perfil Ativo:</label>
+        <select id="driverSelect" [(ngModel)]="selectedDriverId" (ngModelChange)="onDriverChange()"
+          class="form-control">
+          <option *ngFor="let driver of drivers" [value]="driver.id">
+            {{ driver.name }} ({{ driver.vehicle || 'Sem veículo' }})
+          </option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alertas do Sistema -->
+  <div *ngIf="errorMessage" class="alert alert-danger">
+    <i class="pi pi-exclamation-triangle"></i> {{ errorMessage }}
+  </div>
+
+  <div *ngIf="successMessage" class="alert alert-success">
+    <i class="pi pi-check-circle"></i> {{ successMessage }}
+  </div>
+
+  <!-- 1. OPERACIONAL: Minhas Corridas Aceitas / Em Andamento (Destaque Superior) -->
+  <div *ngIf="myAcceptedRides.length > 0" class="card active-rides-card mb-4">
+    <div class="section-header">
+      <h3>
+        <i class="pi pi-bolt text-warning"></i> Minhas Corridas em Andamento
+        <span class="count-badge count-badge-in-progress">{{ myAcceptedRides.length }}</span>
+      </h3>
+      <span class="live-indicator live-indicator-active">
+        <i class="pi pi-circle-fill"></i> Corrida sob sua responsabilidade
+      </span>
+    </div>
+
+    <div class="rides-grid">
+      <div *ngFor="let ride of myAcceptedRides" class="ride-card accepted-card">
+        <div class="ride-card-header">
+          <span class="ride-id">Corrida #{{ ride.id }}</span>
+          <span class="badge-in-progress"><i class="pi pi-spin pi-spinner"></i> Em Andamento</span>
+        </div>
+        <div class="ride-card-body">
+          <p class="address-line">
+            <strong><i class="pi pi-map-marker text-success"></i> Origem:</strong>
+            {{ ride.origin_address }}
+          </p>
+          <p class="address-line">
+            <strong><i class="pi pi-flag text-danger"></i> Destino:</strong>
+            {{ ride.destination_address }}
+          </p>
+          <div class="meta-row mt-2">
+            <small class="passenger-tag" *ngIf="ride.user_id">
+              <i class="pi pi-user"></i> Passageiro: {{ ride.user_id }}
+            </small>
+            <small class="driver-self-tag">
+              <i class="pi pi-car"></i> Seu veículo: {{ getDriverVehicle(selectedDriverId) || 'Vinculado' }}
+            </small>
+          </div>
+        </div>
+        <div class="ride-card-actions">
+          <button (click)="concluirCorrida(ride)" class="btn btn-complete" [disabled]="completingRideId === ride.id">
+            <span *ngIf="completingRideId === ride.id"><i class="pi pi-spin pi-spinner"></i> Concluindo...</span>
+            <span *ngIf="completingRideId !== ride.id"><i class="pi pi-check-circle"></i> Concluir Corrida</span>
+          </button>
+          <button (click)="cancelarCorridaPeloMotorista(ride)" class="btn btn-cancel">
+            <i class="pi pi-times"></i> Cancelar Corrida
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. OPERACIONAL: Corridas Disponíveis para Aceitar (Sempre do Dia Atual) -->
+  <div class="card mb-4">
+    <div class="section-header">
+      <div>
+        <h3>
+          <i class="pi pi-bell"></i> Corridas Disponíveis
+          <span class="count-badge">{{ availableRides.length }}</span>
+        </h3>
+        <p class="subtitle">Exibindo apenas chamadas pendentes do dia atual.</p>
+      </div>
+      <div class="header-badges">
+        <span class="default-date-tag">
+          <i class="pi pi-calendar"></i> Hoje ({{ filterStartDate | date:'dd/MM/yyyy' }})
+        </span>
+        <span class="live-indicator"><i class="pi pi-circle-fill"></i> Conectado em Tempo Real</span>
+      </div>
+    </div>
+
+    <div *ngIf="availableRides.length === 0" class="empty-state">
+      <i class="pi pi-inbox empty-icon"></i>
+      <p>Nenhuma corrida disponível no momento para o dia de hoje.</p>
+      <small>Assim que um passageiro solicitar uma corrida hoje, ela aparecerá aqui instantaneamente!</small>
+    </div>
+
+    <div *ngIf="availableRides.length > 0" class="rides-grid">
+      <div *ngFor="let ride of availableRides" class="ride-card">
+        <div class="ride-card-header">
+          <span class="ride-id">Corrida #{{ ride.id }}</span>
+          <div>
+            <span class="badge-pending"><i class="pi pi-clock"></i> Pendente</span>
+            <small class="today-time-badge" *ngIf="ride.created_at">
+              <i class="pi pi-clock"></i> {{ ride.created_at | date:'HH:mm' }}
+            </small>
+          </div>
+        </div>
+
+        <div class="ride-card-body">
+          <p class="address-line">
+            <strong><i class="pi pi-map-marker text-success"></i> Origem:</strong>
+            {{ ride.origin_address }}
+          </p>
+          <p class="address-line">
+            <strong><i class="pi pi-flag text-danger"></i> Destino:</strong>
+            {{ ride.destination_address }}
+          </p>
+          <small class="passenger-tag">
+            <i class="pi pi-user"></i> Passageiro: {{ ride.user_id }}
+          </small>
+        </div>
+
+        <div class="ride-card-actions">
+          <button (click)="aceitarCorrida(ride)" class="btn btn-accept" [disabled]="acceptingRideId === ride.id">
+            <span *ngIf="acceptingRideId === ride.id">
+              <i class="pi pi-spin pi-spinner"></i> Aceitando...
+            </span>
+            <span *ngIf="acceptingRideId !== ride.id">
+              <i class="pi pi-check"></i> Aceitar
+            </span>
+          </button>
+          <button (click)="rejeitarCorrida(ride.id)" class="btn btn-reject">
+            <i class="pi pi-times"></i> Rejeitar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. CONSULTA: Filtro de Corridas por Período e Motorista -->
+  <div class="card filter-card mb-4">
+    <div class="section-header">
+      <div>
+        <h3><i class="pi pi-filter"></i> Consulta de Corridas por Motorista e Data</h3>
+        <p class="subtitle">Pesquise por período e motorista, identificando se concluída, cancelada ou pendente.</p>
+      </div>
+      <span class="default-date-tag">
+        <i class="pi pi-calendar"></i> Padrão: Hoje ({{ filterStartDate | date:'dd/MM/yyyy' }})
+      </span>
+    </div>
+
+    <div class="filters-grid">
+      <!-- Filtro Motorista -->
+      <div class="filter-group">
+        <label for="filterDriver">Motorista:</label>
+        <select id="filterDriver" [(ngModel)]="filterDriverId" class="form-control">
+          <option value="ALL">-- Todos os Motoristas --</option>
+          <option *ngFor="let driver of drivers" [value]="driver.id">
+            {{ driver.name }} ({{ driver.vehicle || 'Sem veículo' }})
+          </option>
+        </select>
+      </div>
+
+      <!-- Filtro Data Início -->
+      <div class="filter-group">
+        <label for="startDate">Data Inicial:</label>
+        <input 
+          id="startDate" 
+          type="date" 
+          [(ngModel)]="filterStartDate" 
+          class="form-control"
+        />
+      </div>
+
+      <!-- Filtro Data Fim -->
+      <div class="filter-group">
+        <label for="endDate">Data Final:</label>
+        <input 
+          id="endDate" 
+          type="date" 
+          [(ngModel)]="filterEndDate" 
+          class="form-control"
+        />
+      </div>
+
+      <!-- Filtro Status -->
+      <div class="filter-group">
+        <label for="filterStatus">Status:</label>
+        <select id="filterStatus" [(ngModel)]="filterStatus" class="form-control">
+          <option value="ALL">Todos os Status</option>
+          <option value="PENDING">Pendente</option>
+          <option value="IN_PROGRESS">Em Andamento</option>
+          <option value="COMPLETED">Concluída</option>
+          <option value="CANCELLED">Cancelada</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Botões de Pesquisa -->
+    <div class="filter-actions mt-3">
+      <button (click)="pesquisarCorridas()" class="btn btn-search" [disabled]="searching">
+        <i class="pi pi-search" *ngIf="!searching"></i>
+        <i class="pi pi-spin pi-spinner" *ngIf="searching"></i>
+        <span>{{ searching ? 'Buscando...' : 'Pesquisar' }}</span>
+      </button>
+      <button (click)="definirFiltroHoje()" class="btn btn-secondary">
+        <i class="pi pi-calendar"></i> Hoje
+      </button>
+      <button (click)="limparFiltros()" class="btn btn-outline">
+        <i class="pi pi-filter-slash"></i> Limpar Filtros
+      </button>
+    </div>
+  </div>
+
+  <!-- 4. RESULTADOS DA CONSULTA: Histórico / Corridas do Período -->
+  <div class="card mb-4">
+    <div class="section-header">
+      <h3>
+        <i class="pi pi-list"></i> Histórico / Corridas do Período
+        <span class="count-badge">{{ filteredRides.length }}</span>
+      </h3>
+      <span class="period-badge" *ngIf="filterStartDate">
+        {{ filterStartDate | date:'dd/MM/yyyy' }} até {{ filterEndDate | date:'dd/MM/yyyy' }}
+      </span>
+    </div>
+
+    <div *ngIf="filteredRides.length === 0" class="empty-state">
+      <i class="pi pi-inbox empty-icon"></i>
+      <p>Nenhuma corrida encontrada para o período e motorista selecionados.</p>
+      <small>Dica: Altere a data ou selecione "Todos os Motoristas" para expandir a busca.</small>
+    </div>
+
+    <div *ngIf="filteredRides.length > 0" class="rides-grid">
+      <div *ngFor="let ride of filteredRides" class="ride-card">
+        <div class="ride-card-header">
+          <span class="ride-id">Corrida #{{ ride.id }}</span>
+          <div>
+            <span *ngIf="ride.status === 'PENDING'" class="badge-pending">
+              <i class="pi pi-clock"></i> Pendente
+            </span>
+            <span *ngIf="ride.status === 'IN_PROGRESS'" class="badge-in-progress">
+              <i class="pi pi-spin pi-spinner"></i> Em Andamento
+            </span>
+            <span *ngIf="ride.status === 'COMPLETED'" class="badge-completed">
+              <i class="pi pi-check"></i> Concluída
+            </span>
+            <span *ngIf="ride.status === 'CANCELLED'" class="badge-cancelled">
+              <i class="pi pi-times"></i> Cancelada
+            </span>
+          </div>
+        </div>
+
+        <div class="ride-card-body">
+          <p class="address-line">
+            <strong><i class="pi pi-map-marker text-success"></i> Origem:</strong>
+            {{ ride.origin_address }}
+          </p>
+          <p class="address-line">
+            <strong><i class="pi pi-flag text-danger"></i> Destino:</strong>
+            {{ ride.destination_address }}
+          </p>
+
+          <div class="driver-identified-badge" *ngIf="ride.driver_id">
+            <i class="pi pi-user-check"></i>
+            <span><strong>Motorista:</strong> {{ ride.driver?.name || getDriverName(ride.driver_id) }}</span>
+            <span *ngIf="ride.driver?.vehicle || getDriverVehicle(ride.driver_id)" class="vehicle-tag">
+              ({{ ride.driver?.vehicle || getDriverVehicle(ride.driver_id) }})
+            </span>
+          </div>
+          <div class="no-driver-badge" *ngIf="!ride.driver_id">
+            <i class="pi pi-info-circle"></i> Sem motorista atribuído (Pendente)
+          </div>
+
+          <div class="meta-row mt-2">
+            <small class="passenger-tag">
+              <i class="pi pi-user"></i> Passageiro: {{ ride.user_id }}
+            </small>
+            <small class="creation-time" *ngIf="ride.created_at">
+              <i class="pi pi-calendar"></i> Criada: {{ ride.created_at | date:'dd/MM/yyyy HH:mm' }}
+            </small>
+            <small class="completion-time" *ngIf="ride.status === 'COMPLETED' && ride.updated_at">
+              <i class="pi pi-check-circle"></i> Concluída: {{ ride.updated_at | date:'dd/MM/yyyy HH:mm' }}
+            </small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. HISTÓRICO: Corridas Concluídas pelo Motorista Logado -->
+  <div *ngIf="myCompletedRides.length > 0" class="card completed-section mb-4">
+    <div class="section-header">
+      <h3>
+        <i class="pi pi-verified text-success"></i> Minhas Corridas Concluídas
+        <span class="count-badge count-badge-success">{{ myCompletedRides.length }}</span>
+      </h3>
+    </div>
+    <div class="rides-grid">
+      <div *ngFor="let ride of myCompletedRides" class="ride-card completed-card">
+        <div class="ride-card-header">
+          <span class="ride-id">Corrida #{{ ride.id }}</span>
+          <span class="badge-completed"><i class="pi pi-check"></i> Concluída</span>
+        </div>
+        <div class="ride-card-body">
+          <p class="address-line">
+            <strong><i class="pi pi-map-marker text-success"></i> Origem:</strong>
+            {{ ride.origin_address }}
+          </p>
+          <p class="address-line">
+            <strong><i class="pi pi-flag text-danger"></i> Destino:</strong>
+            {{ ride.destination_address }}
+          </p>
+          <div class="driver-identified-badge">
+            <i class="pi pi-user-check"></i>
+            <span><strong>Motorista:</strong> {{ ride.driver?.name || getDriverName(ride.driver_id) }}</span>
+            <span *ngIf="ride.driver?.vehicle || getDriverVehicle(ride.driver_id)" class="vehicle-tag">
+              ({{ ride.driver?.vehicle || getDriverVehicle(ride.driver_id) }})
+            </span>
+          </div>
+          <small class="passenger-tag" *ngIf="ride.user_id">
+            <i class="pi pi-user"></i> Passageiro: {{ ride.user_id }}
+          </small>
+          <small class="completion-time" *ngIf="ride.updated_at">
+            <i class="pi pi-clock"></i> Concluída em: {{ ride.updated_at | date:'shortTime' }}
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

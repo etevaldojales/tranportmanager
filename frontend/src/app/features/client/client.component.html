@@ -1,0 +1,132 @@
+<div class="client-container">
+  <div class="card header-card">
+    <h2><i class="pi pi-user"></i> Interface do Passageiro / Cliente</h2>
+    <p class="subtitle">Solicite sua corrida e acompanhe a aceitação em tempo real via WebSocket.</p>
+  </div>
+
+  <!-- Alertas de Sucesso e Erro -->
+  <div *ngIf="errorMessage" class="alert alert-danger">
+    <i class="pi pi-exclamation-triangle"></i> {{ errorMessage }}
+  </div>
+
+  <div *ngIf="successMessage" class="alert alert-success">
+    <i class="pi pi-check-circle"></i> {{ successMessage }}
+  </div>
+
+  <!-- Formulário de Criação de Corrida (se não houver corrida ativa) -->
+  <div *ngIf="!currentRide" class="card form-card">
+    <h3>Nova Solicitação de Corrida</h3>
+    <form [formGroup]="rideForm" (ngSubmit)="solicitarCorrida()">
+      <div class="form-group">
+        <label for="userId">Selecione o Passageiro (Mock):</label>
+        <select id="userId" formControlName="userId" class="form-control">
+          <option *ngFor="let client of clients" [value]="client.id">
+            {{ client.name }} (ID: {{ client.id }})
+          </option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="originAddress">Ponto de Partida / Origem:</label>
+        <input 
+          id="originAddress" 
+          type="text" 
+          formControlName="originAddress" 
+          placeholder="Ex: Av. Santos Dumont, 1200 - Aldeota"
+          class="form-control"
+          [class.is-invalid]="rideForm.get('originAddress')?.touched && rideForm.get('originAddress')?.invalid"
+        />
+        <small *ngIf="rideForm.get('originAddress')?.touched && rideForm.get('originAddress')?.invalid" class="text-danger">
+          Endereço de partida é obrigatório.
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="destinationAddress">Ponto de Chegada / Destino:</label>
+        <input 
+          id="destinationAddress" 
+          type="text" 
+          formControlName="destinationAddress" 
+          placeholder="Ex: Av. Beira Mar, 3000 - Meireles"
+          class="form-control"
+          [class.is-invalid]="rideForm.get('destinationAddress')?.touched && rideForm.get('destinationAddress')?.invalid"
+        />
+        <small *ngIf="rideForm.get('destinationAddress')?.touched && rideForm.get('destinationAddress')?.invalid" class="text-danger">
+          Endereço de destino é obrigatório.
+        </small>
+      </div>
+
+      <button type="submit" class="btn btn-primary" [disabled]="loading">
+        <span *ngIf="loading"><i class="pi pi-spin pi-spinner"></i> Solicitando...</span>
+        <span *ngIf="!loading"><i class="pi pi-send"></i> Solicitar Corrida</span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Acompanhamento da Corrida em Tempo Real -->
+  <div *ngIf="currentRide" class="card ride-status-card">
+    <div class="status-header">
+      <div>
+        <h3>Corrida #{{ currentRide.id }}</h3>
+        <p class="text-muted">Criada em: {{ currentRide.created_at | date:'shortTime' }}</p>
+      </div>
+      <div>
+        <span *ngIf="currentRide.status === 'PENDING'" class="badge-pending">
+          <i class="pi pi-spin pi-spinner"></i> Aguardando Motorista
+        </span>
+        <span *ngIf="currentRide.status === 'IN_PROGRESS'" class="badge-in-progress">
+          <i class="pi pi-check"></i> Em Andamento
+        </span>
+        <span *ngIf="currentRide.status === 'COMPLETED'" class="badge-completed">
+          <i class="pi pi-check-circle"></i> Concluída
+        </span>
+        <span *ngIf="currentRide.status === 'CANCELLED'" class="badge-cancelled">
+          Cancelada
+        </span>
+      </div>
+    </div>
+
+    <div class="ride-details">
+      <div class="detail-item">
+        <strong><i class="pi pi-map-marker text-success"></i> Origem:</strong>
+        <p>{{ currentRide.origin_address }}</p>
+      </div>
+      <div class="detail-item">
+        <strong><i class="pi pi-flag text-danger"></i> Destino:</strong>
+        <p>{{ currentRide.destination_address }}</p>
+      </div>
+    </div>
+
+    <!-- Informações do Motorista que Aceitou -->
+    <div *ngIf="currentRide.status === 'IN_PROGRESS'" class="driver-box">
+      <h4><i class="pi pi-car"></i> Motorista a Caminho</h4>
+      <p><strong>Nome:</strong> {{ driverInfo?.name || currentRide.driver_id }}</p>
+      <p *ngIf="driverInfo?.vehicle"><strong>Veículo:</strong> {{ driverInfo.vehicle }}</p>
+      <p class="realtime-notice"><i class="pi pi-bolt"></i> Atualizado instantaneamente via WebSocket (ActionCable)!</p>
+    </div>
+
+    <!-- Informações do Motorista na Corrida Concluída -->
+    <div *ngIf="currentRide.status === 'COMPLETED'" class="completed-summary-box">
+      <h4><i class="pi pi-check-circle"></i> Corrida Finalizada com Sucesso!</h4>
+      <p><strong>Motorista Responsável:</strong> {{ driverInfo?.name || currentRide.driver_id }}</p>
+      <p *ngIf="driverInfo?.vehicle"><strong>Veículo:</strong> {{ driverInfo.vehicle }}</p>
+      <p class="completion-notice"><i class="pi pi-shield"></i> Viagem concluída com sucesso com o motorista vinculado.</p>
+    </div>
+
+    <div class="actions mt-3">
+      <button 
+        *ngIf="currentRide.status === 'PENDING' || currentRide.status === 'IN_PROGRESS'" 
+        (click)="cancelarCorrida()" 
+        class="btn btn-danger"
+        [disabled]="loading"
+      >
+        <span *ngIf="loading"><i class="pi pi-spin pi-spinner"></i> Cancelando...</span>
+        <span *ngIf="!loading"><i class="pi pi-times"></i> Cancelar Corrida</span>
+      </button>
+      <button *ngIf="currentRide.status !== 'PENDING' && currentRide.status !== 'IN_PROGRESS'" (click)="novaSolicitacao()" class="btn btn-secondary">
+        <i class="pi pi-plus"></i> Fazer Nova Solicitação
+      </button>
+    </div>
+  </div>
+</div>
+

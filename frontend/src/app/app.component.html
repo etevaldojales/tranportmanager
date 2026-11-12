@@ -1,0 +1,40 @@
+<header class="app-header">
+  <div class="header-content container">
+    <div class="logo">
+      <i class="pi pi-compass"></i>
+      <div>
+        <h1>TransportManager</h1>
+        <span>PGE-CE Desafio Full-Stack (Rails & Angular)</span>
+      </div>
+    </div>
+
+    <nav class="nav-links">
+      <a routerLink="/cliente" routerLinkActive="active" (click)="splitViewMode = false">
+        <i class="pi pi-user"></i> Visão Cliente
+      </a>
+      <a routerLink="/motorista" routerLinkActive="active" (click)="splitViewMode = false">
+        <i class="pi pi-car"></i> Visão Motorista
+      </a>
+      <button class="btn-split" [class.active]="splitViewMode" (click)="toggleSplitView()">
+        <i class="pi pi-window-maximize"></i> Modo Lado a Lado (Demonstração)
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main class="container main-content">
+  <!-- Visualização padrão por rota -->
+  <div *ngIf="!splitViewMode">
+    <router-outlet></router-outlet>
+  </div>
+
+  <!-- Modo de Demonstração Lado a Lado para Gravação de Vídeo / Avaliação Instantânea -->
+  <div *ngIf="splitViewMode" class="split-view-container">
+    <div class="split-pane">
+      <app-client></app-client>
+    </div>
+    <div class="split-pane">
+      <app-driver></app-driver>
+    </div>
+  </div>
+</main>
