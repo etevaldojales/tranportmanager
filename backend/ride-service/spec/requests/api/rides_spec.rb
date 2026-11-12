@@ -79,6 +79,32 @@ RSpec.describe 'Api::Rides', type: :request do
       end
     end
 
+    context 'quando o Account Service está indisponível (out of service / conexão falha)' do
+      before do
+        stub_request(:get, "#{account_service_url}/api/accounts/users/user-client-1")
+          .to_raise(Faraday::ConnectionFailed.new('Connection refused - connect(2)'))
+      end
+
+      it 'utiliza o cache do Redis como fallback resiliente caso o usuário já esteja em cache' do
+        # Popula cache previamente no Redis
+        $redis.set("cache:account:user:user-client-1", { id: 'user-client-1', name: 'Carlos' }.to_json)
+
+        expect {
+          post '/api/rides', params: valid_params
+        }.to change(Ride, :count).by(1)
+
+        expect(response).to have_http_status(:created)
+      end
+
+      it 'retorna 503 Service Unavailable se o serviço estiver fora do ar e não houver cache' do
+        post '/api/rides', params: valid_params
+
+        expect(response).to have_http_status(:service_unavailable)
+        json = JSON.parse(response.body)
+        expect(json['error']).to include('temporariamente indisponível')
+      end
+    end
+
     context 'quando os endereços de partida e destino são iguais' do
       before do
         stub_request(:get, "#{account_service_url}/api/accounts/users/user-client-1")

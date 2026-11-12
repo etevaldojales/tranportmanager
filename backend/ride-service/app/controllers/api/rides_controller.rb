@@ -55,14 +55,20 @@ module Api
     def create
       ride_params = params.require(:ride).permit(:user_id, :origin_address, :destination_address)
 
-      # 1. Validação de comunicação East-West com Account Service
+      # 1. Validação de comunicação East-West com Account Service (com suporte a cache/fallback)
       account_client = AccountServiceClient.new
       user_info = account_client.find_user(ride_params[:user_id])
 
       if user_info.nil?
-        return render json: { 
-          error: "Usuário com identificador '#{ride_params[:user_id]}' não foi encontrado no Account Service." 
-        }, status: :bad_request
+        if account_client.service_unavailable?
+          return render json: { 
+            error: 'Serviço de validação de contas temporariamente indisponível. Tente novamente em instantes.' 
+          }, status: :service_unavailable
+        else
+          return render json: { 
+            error: "Usuário com identificador '#{ride_params[:user_id]}' não foi encontrado no Account Service." 
+          }, status: :bad_request
+        end
       end
 
       # 2. Inicialização e validação das regras de negócio
@@ -98,11 +104,17 @@ module Api
         return render json: { error: 'O identificador do motorista (driver_id) é obrigatório.' }, status: :bad_request
       end
 
-      # Valida se o motorista existe no Account Service
+      # Valida se o motorista existe no Account Service (com suporte a cache/fallback)
       account_client = AccountServiceClient.new
       driver_info = account_client.find_user(driver_id)
       if driver_info.nil?
-        return render json: { error: "Motorista '#{driver_id}' não encontrado no Account Service." }, status: :bad_request
+        if account_client.service_unavailable?
+          return render json: { 
+            error: 'Serviço de validação de contas temporariamente indisponível. Tente novamente em instantes.' 
+          }, status: :service_unavailable
+        else
+          return render json: { error: "Motorista '#{driver_id}' não encontrado no Account Service." }, status: :bad_request
+        end
       end
 
       service = AcceptRideService.new(params[:id], driver_id)

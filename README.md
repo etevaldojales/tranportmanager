@@ -35,7 +35,7 @@ A solução foi projetada em uma arquitetura de microserviços robusta, desacopl
 
 3. **Ride Service (`backend/ride-service`)**:
    - Microserviço central de corridas com **ActionCable nativo**.
-   - **Comunicação East-West:** Validação síncrona com o `Account Service` via HTTP (`Faraday`) antes de criar ou aceitar corridas.
+   - **Comunicação East-West Resiliente com Cache e Fallback:** Validação com o `Account Service` via HTTP (`Faraday`) com timeout curto (3s) para mitigar travamento de threads. Implementa cache distribuído no **Redis** (TTL de 1h) e mecanismo de fallback: se o `Account Service` sofrer indisponibilidade temporária, o sistema continua operando com os perfis em cache ou retorna `503 Service Unavailable` controlado sem gerar falhas em cascata.
    - **Mensageria com RabbitMQ:** Publicação de eventos na fila `rides_queue` via driver oficial `Bunny` para processamento assíncrono por workers.
    - **Tratamento de Concorrência Crítica (Distributed Lock):** Implementação do `AcceptRideService` utilizando lock distribuído atômico no Redis (`SET NX EX` com script de liberação Lua), garantindo que apenas um motorista consiga aceitar uma mesma corrida, retornando `409 Conflict` imediatamente para requisições concorrentes.
    - **Tempo Real com ActionCable:** Notificações em canais dedicados (`DriverRidesChannel` e `ClientRideChannel`).

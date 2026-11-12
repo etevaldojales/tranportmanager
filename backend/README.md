@@ -9,7 +9,7 @@ O backend é composto por microserviços em **Ruby on Rails** orquestrados via *
 * **API Gateway (`gateway`)**: Nginx na porta `8080`, unificando os microserviços e roteando tráfego HTTP e WebSockets (`/cable`).
 * **Account Service (`account-service`)**: Porta `3001`. Fornece dados e perfil de usuários/motoristas mockados (`GET /api/accounts/users/:id`).
 * **Ride Service (`ride-service`)**: Porta `3000`. Gerencia o ciclo de vida das corridas:
-  * **Comunicação East-West:** Valida se o cliente existe no Account Service via `Faraday`.
+  * **Comunicação East-West Resiliente:** Valida se o cliente/motorista existe no Account Service via `Faraday` com timeout curto (3s), cache distribuído no **Redis** (1h) e fallback gracioso em caso de downtime.
   * **Concorrência:** Lock atômico distribuído no **Redis** (`SET NX EX 10` e liberação via script Lua) evitando que dois motoristas aceitem a mesma corrida simultaneamente.
   * **Mensageria:** Publica eventos no **RabbitMQ** usando o driver `Bunny`.
   * **Tempo Real:** Notificações instantâneas via **ActionCable** (`DriverRidesChannel` e `ClientRideChannel`).
